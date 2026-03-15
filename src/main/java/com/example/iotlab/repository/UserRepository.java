@@ -9,4 +9,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    // Used by OverdueEmailService to look up a student's email by name
+    Optional<User> findByNameIgnoreCase(String name);
 }
