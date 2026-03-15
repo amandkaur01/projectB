@@ -29,8 +29,12 @@ public class BorrowController {
     private BorrowRepository borrowRepository;
 
     @PostMapping
-    public Borrow borrowEquipment(@RequestBody Borrow borrow) {
-        return service.borrowEquipment(borrow);
+    public ResponseEntity<Borrow> borrowEquipment(@RequestBody Borrow borrow) {
+        Borrow result = service.borrowEquipment(borrow);
+        if (result == null) {
+            return ResponseEntity.badRequest().build(); // 400 — out of stock or invalid
+        }
+        return ResponseEntity.ok(result); // 200 with saved borrow
     }
 
     @PutMapping("/return/{id}/{qty}")
