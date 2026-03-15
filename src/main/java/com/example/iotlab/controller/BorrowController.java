@@ -34,8 +34,13 @@ public class BorrowController {
     }
 
     @PutMapping("/return/{id}/{qty}")
-    public Borrow returnEquipment(@PathVariable Long id, @PathVariable int qty) {
-        return service.returnEquipment(id, qty);
+    public ResponseEntity<Borrow> returnEquipment(
+            @PathVariable Long id, @PathVariable int qty) {
+        Borrow result = service.returnEquipment(id, qty);
+        if (result == null) {
+            return ResponseEntity.badRequest().build(); // 400 — invalid qty or id
+        }
+        return ResponseEntity.ok(result); // 200 with updated borrow
     }
 
     @GetMapping
