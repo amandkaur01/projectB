@@ -114,8 +114,7 @@ public class AnalyticsController {
             int year = monthDate.getYear();
             int month = monthDate.getMonthValue();
             String monthLabel = monthDate.getMonth()
-                    .getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-                    + " " + year;
+                    .getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
 
             long borrows = allBorrows.stream()
                     .filter(b -> b.getBorrowDate() != null
