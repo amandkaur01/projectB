@@ -23,7 +23,6 @@ public class DashboardController {
 
     @Autowired
     private EquipmentRepository equipmentRepository;
-
     @Autowired
     private BorrowRepository borrowRepository;
 
@@ -32,38 +31,40 @@ public class DashboardController {
 
         Map<String, Long> stats = new HashMap<>();
 
-        // ── 1. Total Equipment ────────────────────────────────────────────
-        // Sum of totalQuantity across all equipment rows (total physical units)
+        // ── Total Units ───────────────────────────────────────────────────
         List<Equipment> allEquipment = equipmentRepository.findAll();
         long totalUnits = allEquipment.stream()
-                .mapToLong(Equipment::getTotalQuantity)
-                .sum();
+                .mapToLong(Equipment::getTotalQuantity).sum();
         stats.put("totalEquipment", totalUnits);
 
-        // ── 2. Available Now ──────────────────────────────────────────────
-        // Sum of availableQuantity across all equipment (units currently on shelf)
+        // ── Available Units ───────────────────────────────────────────────
         long availableUnits = allEquipment.stream()
-                .mapToLong(Equipment::getAvailableQuantity)
-                .sum();
+                .mapToLong(Equipment::getAvailableQuantity).sum();
         stats.put("available", availableUnits);
 
-        // ── 3. Currently Borrowed & 4. Overdue ───────────────────────────
-        // Walk every active borrow record.
-        // Auto-mark overdue if dueDate has passed and not yet returned.
-        // Count borrowed units = sum of (quantity - returnedQuantity) for active records.
+        // ── Borrowed & Overdue ────────────────────────────────────────────
         List<Borrow> allBorrows = borrowRepository.findAll();
-
         long borrowedUnits = 0;
         long overdueUnits = 0;
 
         for (Borrow b : allBorrows) {
+
+            // Fix stuck records: if fully returned, ensure status is RETURNED
+            if (b.getQuantity() > 0
+                    && b.getReturnedQuantity() >= b.getQuantity()) {
+                if (!"RETURNED".equals(b.getStatus())) {
+                    b.setStatus("RETURNED");
+                    borrowRepository.save(b);
+                }
+                continue; // fully returned — don't count as borrowed or overdue
+            }
 
             // Skip fully returned records
             if ("RETURNED".equals(b.getStatus())) {
                 continue;
             }
 
-            // Auto-detect and persist overdue status
+            // Auto-detect overdue for active records
             if (b.getDueDate() != null && b.getDueDate().isBefore(LocalDate.now())) {
                 if (!"OVERDUE".equals(b.getStatus())) {
                     b.setStatus("OVERDUE");
@@ -71,12 +72,8 @@ public class DashboardController {
                 }
             }
 
-            // Units still outstanding on this record
-            int outstanding = b.getQuantity() - b.getReturnedQuantity();
-            if (outstanding < 0) {
-                outstanding = 0;
-            }
-
+            // Count outstanding units
+            int outstanding = Math.max(0, b.getQuantity() - b.getReturnedQuantity());
             borrowedUnits += outstanding;
 
             if ("OVERDUE".equals(b.getStatus())) {

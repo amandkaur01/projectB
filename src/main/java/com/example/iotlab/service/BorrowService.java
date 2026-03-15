@@ -30,7 +30,6 @@ public class BorrowService {
 
         Equipment equipment = equipmentRepository
                 .findByName(borrow.getEquipmentName()).orElse(null);
-
         if (equipment == null) {
             return null;
         }
@@ -40,8 +39,7 @@ public class BorrowService {
             return null;
         }
 
-        int newAvailable = available - borrow.getQuantity();
-        equipment.setAvailableQuantity(newAvailable);
+        equipment.setAvailableQuantity(available - borrow.getQuantity());
         equipmentRepository.save(equipment);
 
         borrow.setBorrowDate(LocalDate.now());
@@ -50,17 +48,28 @@ public class BorrowService {
         borrow.setReturnedQuantity(0);
 
         Borrow saved = borrowRepository.save(borrow);
-
-        // ── Log stock alert if needed ─────────────────────────────────────
-        logStockAlertIfNeeded(equipment, newAvailable);
-
+        logStockAlertIfNeeded(equipment, equipment.getAvailableQuantity());
         return saved;
     }
 
-    // ── Admin view with OVERDUE detection ─────────────────────────────────
+    // ── Admin view — auto-detect overdue ──────────────────────────────────
     public List<Borrow> getAllBorrowed() {
+
         List<Borrow> borrows = borrowRepository.findAll();
+
         for (Borrow b : borrows) {
+
+            // ── First: fix any fully-returned records stuck on wrong status ─
+            if (b.getQuantity() > 0
+                    && b.getReturnedQuantity() >= b.getQuantity()) {
+                if (!"RETURNED".equals(b.getStatus())) {
+                    b.setStatus("RETURNED");
+                    borrowRepository.save(b);
+                }
+                continue; // fully returned — skip overdue check
+            }
+
+            // ── Then: mark overdue only if still active and past due date ──
             if (!"RETURNED".equals(b.getStatus()) && b.getDueDate() != null) {
                 if (b.getDueDate().isBefore(LocalDate.now())) {
                     b.setStatus("OVERDUE");
@@ -68,6 +77,7 @@ public class BorrowService {
                 }
             }
         }
+
         return borrows;
     }
 
@@ -79,6 +89,7 @@ public class BorrowService {
             return null;
         }
 
+        // If already fully returned, reject
         int remaining = borrow.getQuantity() - borrow.getReturnedQuantity();
         if (qty <= 0 || qty > remaining) {
             return null;
@@ -95,15 +106,13 @@ public class BorrowService {
                     equipment.getTotalQuantity());
             equipment.setAvailableQuantity(newAvailable);
             equipmentRepository.save(equipment);
-
-            // Re-check if stock is still low after return
-            // (if it recovered, alert stays open until admin actively restocks)
             logStockAlertIfNeeded(equipment, newAvailable);
         }
 
-        if (borrow.getReturnedQuantity() == borrow.getQuantity()) {
-            borrow.setStatus("RETURNED"); 
-        }else {
+        // Update status based on returned amount
+        if (borrow.getReturnedQuantity() >= borrow.getQuantity()) {
+            borrow.setStatus("RETURNED");
+        } else {
             borrow.setStatus("PARTIAL");
         }
 
@@ -126,21 +135,13 @@ public class BorrowService {
         return stats;
     }
 
-    // ── Private helper ────────────────────────────────────────────────────
-    /**
-     * Creates a StockAlert if: - available == 0 → OUT_OF_STOCK - available <
-     * 30% of total → LOW_STOCK Only logs once per equipment (no duplicates
-     * while still unresolved).
-     */
+    // ── Stock alert helper ────────────────────────────────────────────────
     private void logStockAlertIfNeeded(Equipment equipment, int newAvailable) {
-        // Skip if an unresolved alert already exists for this equipment
-        if (stockAlertRepository.existsByEquipmentNameAndResolvedFalse(
-                equipment.getName())) {
+        if (stockAlertRepository.existsByEquipmentNameAndResolvedFalse(equipment.getName())) {
             return;
         }
 
         String alertType = null;
-
         if (newAvailable == 0) {
             alertType = "OUT_OF_STOCK";
         } else if (equipment.getTotalQuantity() > 0
@@ -149,13 +150,9 @@ public class BorrowService {
         }
 
         if (alertType != null) {
-            StockAlert alert = new StockAlert(
-                    equipment.getName(),
-                    alertType,
-                    newAvailable,
-                    LocalDate.now()
-            );
-            stockAlertRepository.save(alert);
+            stockAlertRepository.save(new StockAlert(
+                    equipment.getName(), alertType,
+                    newAvailable, LocalDate.now()));
         }
     }
 }
