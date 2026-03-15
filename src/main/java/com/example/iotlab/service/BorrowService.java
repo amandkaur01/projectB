@@ -120,8 +120,32 @@ public class BorrowService {
     }
 
     // ── Student History ───────────────────────────────────────────────────
+    // Also self-heals any stuck records (fully returned but wrong status)
     public List<Borrow> getBorrowsByStudent(String studentName) {
-        return borrowRepository.findByStudentName(studentName);
+        List<Borrow> records = borrowRepository.findByStudentName(studentName);
+
+        for (Borrow b : records) {
+            // Fix: if all qty returned, ensure status is RETURNED
+            if (b.getQuantity() > 0
+                    && b.getReturnedQuantity() >= b.getQuantity()) {
+                if (!"RETURNED".equals(b.getStatus())) {
+                    b.setStatus("RETURNED");
+                    borrowRepository.save(b);
+                }
+                continue;
+            }
+            // Also auto-detect overdue for active records
+            if (!"RETURNED".equals(b.getStatus()) && b.getDueDate() != null) {
+                if (b.getDueDate().isBefore(LocalDate.now())) {
+                    if (!"OVERDUE".equals(b.getStatus())) {
+                        b.setStatus("OVERDUE");
+                        borrowRepository.save(b);
+                    }
+                }
+            }
+        }
+
+        return records;
     }
 
     // ── Student Analytics ─────────────────────────────────────────────────
