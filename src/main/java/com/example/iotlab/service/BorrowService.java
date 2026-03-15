@@ -59,17 +59,15 @@ public class BorrowService {
 
         for (Borrow b : borrows) {
 
-            // ── First: fix any fully-returned records stuck on wrong status ─
             if (b.getQuantity() > 0
                     && b.getReturnedQuantity() >= b.getQuantity()) {
                 if (!"RETURNED".equals(b.getStatus())) {
                     b.setStatus("RETURNED");
                     borrowRepository.save(b);
                 }
-                continue; // fully returned — skip overdue check
+                continue;
             }
 
-            // ── Then: mark overdue only if still active and past due date ──
             if (!"RETURNED".equals(b.getStatus()) && b.getDueDate() != null) {
                 if (b.getDueDate().isBefore(LocalDate.now())) {
                     b.setStatus("OVERDUE");
@@ -89,7 +87,6 @@ public class BorrowService {
             return null;
         }
 
-        // If already fully returned, reject
         int remaining = borrow.getQuantity() - borrow.getReturnedQuantity();
         if (qty <= 0 || qty > remaining) {
             return null;
@@ -109,23 +106,22 @@ public class BorrowService {
             logStockAlertIfNeeded(equipment, newAvailable);
         }
 
-        // Update status based on returned amount
+        // ✅ FIXED STATUS LOGIC
         if (borrow.getReturnedQuantity() >= borrow.getQuantity()) {
             borrow.setStatus("RETURNED");
         } else {
-            borrow.setStatus("PARTIAL");
+            borrow.setStatus("BORROWED");
         }
 
         return borrowRepository.save(borrow);
     }
 
     // ── Student History ───────────────────────────────────────────────────
-    // Also self-heals any stuck records (fully returned but wrong status)
     public List<Borrow> getBorrowsByStudent(String studentName) {
         List<Borrow> records = borrowRepository.findByStudentName(studentName);
 
         for (Borrow b : records) {
-            // Fix: if all qty returned, ensure status is RETURNED
+
             if (b.getQuantity() > 0
                     && b.getReturnedQuantity() >= b.getQuantity()) {
                 if (!"RETURNED".equals(b.getStatus())) {
@@ -134,7 +130,7 @@ public class BorrowService {
                 }
                 continue;
             }
-            // Also auto-detect overdue for active records
+
             if (!"RETURNED".equals(b.getStatus()) && b.getDueDate() != null) {
                 if (b.getDueDate().isBefore(LocalDate.now())) {
                     if (!"OVERDUE".equals(b.getStatus())) {
