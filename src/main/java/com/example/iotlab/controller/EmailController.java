@@ -51,8 +51,8 @@ public class EmailController {
             return ResponseEntity.ok("Email service not configured. Emails run automatically at 8 AM.");
         }
         try {
-            overdueEmailService.sendOverdueWarningEmails();
-            return ResponseEntity.ok("Overdue email check completed.");
+            overdueEmailService.triggerManual(); // force-sends to all current overdue
+            return ResponseEntity.ok("✅ Overdue email check completed. All overdue students have been notified.");
         } catch (Exception e) {
             System.err.println("[EmailController] Trigger failed: " + e.getMessage());
             return ResponseEntity.ok("Email check ran but encountered an issue: " + e.getMessage());
