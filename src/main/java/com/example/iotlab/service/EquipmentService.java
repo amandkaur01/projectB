@@ -1,7 +1,6 @@
 package com.example.iotlab.service;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,29 +9,22 @@ import org.springframework.stereotype.Service;
 
 import com.example.iotlab.model.Equipment;
 import com.example.iotlab.model.RestockRecord;
-import com.example.iotlab.model.StockAlert;
 import com.example.iotlab.repository.EquipmentRepository;
 import com.example.iotlab.repository.RestockRepository;
-import com.example.iotlab.repository.StockAlertRepository;
 
 @Service
 public class EquipmentService {
 
     @Autowired
     private EquipmentRepository repository;
-    @Autowired
+
+    @Autowired(required = false)  // won't crash if RestockRepository is missing
     private RestockRepository restockRepository;
-    @Autowired
-    private StockAlertRepository stockAlertRepository;
 
     /**
-     * Add or update equipment.
-     *
-     * If equipment with this name already exists → update quantities. - Logs a
-     * RestockRecord with alert linkage (alertDate, alertType, daysTaken). -
-     * Resolves any open StockAlert for this equipment.
-     *
-     * If equipment is new → insert fresh row. No restock log.
+     * Add or update equipment by name (case-insensitive upsert). If the
+     * equipment already exists → adds quantity on top. If new → creates a fresh
+     * row.
      */
     public Equipment addEquipment(Equipment incoming) {
 
@@ -57,39 +49,24 @@ public class EquipmentService {
 
             Equipment saved = repository.save(eq);
 
-            // ── Resolve open StockAlert + compute daysTaken ───────────────
-            LocalDate alertDate = null;
-            String alertType = null;
-            Integer daysTaken = null;
-
-            Optional<StockAlert> openAlert = stockAlertRepository
-                    .findFirstByEquipmentNameAndResolvedFalseOrderByAlertDateAsc(
-                            saved.getName());
-
-            if (openAlert.isPresent()) {
-                StockAlert alert = openAlert.get();
-                alertDate = alert.getAlertDate();
-                alertType = alert.getAlertType();
-                daysTaken = (int) ChronoUnit.DAYS.between(alertDate, LocalDate.now());
-
-                // Mark alert as resolved
-                alert.setResolved(true);
-                stockAlertRepository.save(alert);
+            // Log restock record only if repository is available
+            if (restockRepository != null) {
+                try {
+                    RestockRecord record = new RestockRecord(
+                            saved.getName(),
+                            saved.getCategory(),
+                            addedQty,
+                            stockBefore,
+                            saved.getAvailableQuantity(),
+                            LocalDate.now(),
+                            null, null, null
+                    );
+                    restockRepository.save(record);
+                } catch (Exception e) {
+                    // Don't fail the whole request if restock logging fails
+                    System.err.println("[EquipmentService] Restock log failed: " + e.getMessage());
+                }
             }
-
-            // ── Log RestockRecord ─────────────────────────────────────────
-            RestockRecord record = new RestockRecord(
-                    saved.getName(),
-                    saved.getCategory(),
-                    addedQty,
-                    stockBefore,
-                    saved.getAvailableQuantity(),
-                    LocalDate.now(),
-                    alertDate,
-                    alertType,
-                    daysTaken
-            );
-            restockRepository.save(record);
 
             return saved;
 
