@@ -47,7 +47,7 @@ public class BorrowService {
         equipmentRepository.save(equipment);
 
         borrow.setBorrowDate(LocalDate.now());
-        borrow.setDueDate(LocalDate.now().minusDays(1));
+        borrow.setDueDate(LocalDate.now().plusDays(7));
         borrow.setStatus("BORROWED");
         borrow.setReturnedQuantity(0);
 
