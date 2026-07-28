@@ -16,14 +16,10 @@ import com.example.iotlab.model.User;
 import com.example.iotlab.repository.BorrowRepository;
 import com.example.iotlab.repository.EmailNotificationLogRepository;
 import com.example.iotlab.repository.UserRepository;
-import com.sendgrid.Method;
-import com.sendgrid.Request;
-import com.sendgrid.Response;
-import com.sendgrid.SendGrid;
-import com.sendgrid.helpers.mail.Mail;
-import com.sendgrid.helpers.mail.objects.Content;
-import com.sendgrid.helpers.mail.objects.Email;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 
+import jakarta.mail.internet.MimeMessage;
 @Service
 @EnableScheduling
 public class OverdueEmailService {
@@ -37,8 +33,11 @@ public class OverdueEmailService {
     @Autowired
     private EmailNotificationLogRepository emailLogRepository;
 
-    @Value("${sendgrid.api.key}")
-    private String apiKey;
+   @Autowired
+private JavaMailSender mailSender;
+
+@Value("${spring.mail.username}")
+private String fromEmail;
 
     private static final DateTimeFormatter DATE_FMT
             = DateTimeFormatter.ofPattern("dd MMM yyyy");
@@ -122,34 +121,29 @@ public class OverdueEmailService {
         System.out.println("Emails processed: " + emailsSent);
     }
 
-    // 🚀 SENDGRID EMAIL METHOD
     public String sendEmail(String to, String subject, String htmlContent) {
-        try {
-            Email from = new Email("amankkaur064@gmail.com"); // VERIFIED EMAIL
-            Email toEmail = new Email(to);
+    try {
 
-            Content content = new Content("text/html", htmlContent);
-            Mail mail = new Mail(from, subject, toEmail, content);
+        MimeMessage message = mailSender.createMimeMessage();
 
-            SendGrid sg = new SendGrid(apiKey);
-            Request request = new Request();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            request.setMethod(Method.POST);
-            request.setEndpoint("mail/send");
-            request.setBody(mail.build());
+        helper.setFrom(fromEmail);
+        helper.setTo(to);
+        helper.setSubject(subject);
+        helper.setText(htmlContent, true);
 
-            Response response = sg.api(request);
+        mailSender.send(message);
 
-            System.out.println("SendGrid Status: " + response.getStatusCode());
+        System.out.println("SMTP Email Sent Successfully");
 
-            return null;
+        return null;
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return e.getMessage();
-        }
+    } catch (Exception e) {
+        e.printStackTrace();
+        return e.getMessage();
     }
-
+}
     private String resolveStudentEmail(String studentName) {
         if (studentName == null) {
             return null;
